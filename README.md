@@ -16,7 +16,7 @@ Just run
 python train.py
 ```
 
-and 
+and
 
 ```
 python eval.py

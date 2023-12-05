@@ -31,27 +31,28 @@ def evaluate(model, loss_fn, dataloader, metrics, params):
     summ = []
 
     # compute metrics over the dataset
-    for inputs, targets in tqdm(dataloader):
-        if params['cuda']:
-            inputs, targets = inputs.to('cuda'), targets.to('cuda')
+    with tqdm(iterable=dataloader, desc='Eval', leave=False, position=1) as t:
+        for inputs, targets in t:
+            if params['cuda']:
+                inputs, targets = inputs.to('cuda'), targets.to('cuda')
 
-        outputs = model(inputs)
-        loss = loss_fn(outputs, targets)
+            outputs = model(inputs)
+            loss = loss_fn(outputs, targets)
 
-        outputs = outputs.data.cpu().numpy()
-        targets = targets.data.cpu().numpy()
+            outputs = outputs.data.cpu().numpy()
+            targets = targets.data.cpu().numpy()
 
-        summary_batch = {metric: metrics[metric](
-            outputs, targets) for metric in metrics}
-        summary_batch['loss'] = loss.item()
-        summ.append(summary_batch)
+            summary_batch = {metric: metrics[metric](
+                outputs, targets) for metric in metrics}
+            summary_batch['loss'] = loss.item()
+            summ.append(summary_batch)
 
     # compute mean of all metrics in summary
     metrics_mean = {metric: np.mean([x[metric]
                                     for x in summ]) for metric in summ[0]}
     metrics_string = " ; ".join("{}: {:05.3f}".format(k, v)
                                 for k, v in metrics_mean.items())
-    logger.info("- Eval metrics : " + metrics_string)
+    logger.info("Eval metrics : " + metrics_string)
     return metrics_mean
 
 
@@ -68,7 +69,7 @@ if __name__ == '__main__':
     params['data_dir'] = Path(args.data_dir)
     params['model_dir'] = Path(args.model_dir)
     params['res_dir'] = Path(args.res_dir)
-    
+
     if args.restore_file:
         params['restore_file'] = Path(args.restore_file)
     else:
@@ -83,14 +84,16 @@ if __name__ == '__main__':
         torch.cuda.manual_seed(230)
 
     # Get the logger
-    util.set_logger(params['res_dir'] / 'evaluate.log', log_name='test')
+    util.set_logger(log_path=params['res_dir'] / 'evaluate.log',
+                    log_name='test')
+    logger.info("Start testing.")
 
     # Create the input data pipeline
     logger.info("Creating the dataset...")
 
     test_dataloader = data_loader.get_dataloader(params, train=False)
 
-    logger.info("- done.")
+    logger.info("done")
 
     # Define the model
     model = net.CNN(params).cuda() if params['cuda'] else net.CNN(params)
@@ -107,7 +110,7 @@ if __name__ == '__main__':
     # Evaluate
     test_metrics = evaluate(model, loss_fn, test_dataloader, metrics, params)
 
-    logger.info("- evaluation done.")
+    logger.info("done")
 
     logger.info("Saving result...")
 
@@ -115,4 +118,10 @@ if __name__ == '__main__':
         "metrics_test_{}.json".format(str(params['restore_file']))
     util.save_dict_to_json(test_metrics, save_path)
 
-    logger.info("- done.")
+    logger.info("done")
+
+    for k, v in test_metrics.items():
+        if isinstance(v, float):
+            print(f"The {k} is {(v*100):05.2f}.")
+        else:
+            print(f"The {k} is {v}.")

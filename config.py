@@ -23,4 +23,4 @@ parser.add_argument('--restore_file', default='',
                     help="File to restore the checkpoint if you want")
 
 if __name__ == '__main__':
-    print([i for i in {1:2,3:4}.items()])
+    pass

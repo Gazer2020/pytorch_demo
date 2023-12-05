@@ -36,8 +36,8 @@ def train_one_epoch(model, loss_fn, optimizer, dataloader, metrics, params):
     summ = []
 
     # Use tqdm for progress bar
-    with tqdm(total=len(dataloader)) as t:
-        for i, (inputs, targets) in enumerate(dataloader):
+    with tqdm(iterable=dataloader, desc='Iteration', leave=False, position=1) as t:
+        for i, (inputs, targets) in enumerate(t):
             if params['cuda']:
                 inputs, targets = inputs.to('cuda'), targets.to('cuda')
 
@@ -62,15 +62,12 @@ def train_one_epoch(model, loss_fn, optimizer, dataloader, metrics, params):
             # update the average loss
             loss_avg.update(loss.item())
 
-            t.set_postfix(loss=f'{loss_avg():05.3f}')
-            t.update()
-
     # compute mean of all metrics in summary
     metrics_mean = {metric: np.mean([x[metric]for x in summ])
                     for metric in summ[0]}
     metrics_string = " ; ".join("{}: {:05.3f}".format(k, v)
                                 for k, v in metrics_mean.items())
-    logger.info("- Train metrics: " + metrics_string)
+    logger.info("Train metrics: " + metrics_string)
 
 
 def train(model, train_dataloader, val_dataloader, optimizer, loss_fn, metrics, params):
@@ -89,42 +86,47 @@ def train(model, train_dataloader, val_dataloader, optimizer, loss_fn, metrics, 
     if 'restore_file' in params:
         restore_path = params['res_dir'] / \
             params['restore_file'].with_suffix('.pth.tar')
-        logger.info("Restoring parameters from {}".format(str(restore_path)))
+        logger.info(f"Restoring parameters from {str(restore_path)}")
         util.load_checkpoint(restore_path, model, optimizer)
 
     best_val_acc = 0.0
 
-    for epoch in range(params['num_epochs']):
-        logger.info("Epoch {}/{}".format(epoch + 1, params['num_epochs']))
+    with tqdm(iterable=range(params['num_epochs']), desc='Epoch', position=0) as t:
+        for epoch in t:
+            logger.info(f"Epoch {epoch + 1}/{params['num_epochs']}")
 
-        train_one_epoch(model, loss_fn, optimizer,
-                        train_dataloader, metrics, params)
+            train_one_epoch(model, loss_fn, optimizer,
+                            train_dataloader, metrics, params)
 
-        # Evaluate for one epoch on validation set
-        val_metrics = evaluate(model, loss_fn, val_dataloader, metrics, params)
+            # Evaluate for one epoch on validation set
+            val_metrics = evaluate(
+                model, loss_fn, val_dataloader, metrics, params)
 
-        val_acc = val_metrics['accuracy']
-        is_best = val_acc >= best_val_acc
+            val_acc = val_metrics['accuracy']
+            is_best = val_acc >= best_val_acc
 
-        # Save weights
-        util.save_checkpoint({'epoch': epoch + 1,
-                              'state_dict': model.state_dict(),
-                              'optim_dict': optimizer.state_dict()},
-                             is_best=is_best,
-                             checkpoint_dir=params['res_dir'])
+            # Save weights
+            util.save_checkpoint({'epoch': epoch + 1,
+                                  'state_dict': model.state_dict(),
+                                  'optim_dict': optimizer.state_dict()},
+                                 is_best=is_best,
+                                 checkpoint_dir=params['res_dir'])
 
-        # If best_eval, best_save_path
-        if is_best:
-            logger.info("- Found new best accuracy")
-            best_val_acc = val_acc
+            # If best_eval, best_save_path
+            if is_best:
+                logger.info("Found new best accuracy")
+                best_val_acc = val_acc
 
-            # Save best val metrics in a json file in the model directory
-            best_json_path = params['res_dir'] / "metrics_val_best.json"
-            util.save_dict_to_json(val_metrics, best_json_path)
+                # Save best val metrics in a json file in the model directory
+                best_json_path = params['res_dir'] / "metrics_val_best.json"
+                util.save_dict_to_json(val_metrics, best_json_path)
 
-        # Save latest val metrics in a json file in the model directory
-        last_json_path = params['res_dir'] / "metrics_val_last.json"
-        util.save_dict_to_json(val_metrics, last_json_path)
+            # Save latest val metrics in a json file in the model directory
+            last_json_path = params['res_dir'] / "metrics_val_last.json"
+            util.save_dict_to_json(val_metrics, last_json_path)
+            t.set_postfix(best_acc=f'{best_val_acc:.4f}')
+
+    return best_val_acc
 
 
 if __name__ == '__main__':
@@ -150,7 +152,8 @@ if __name__ == '__main__':
         torch.cuda.manual_seed(2023)
 
     # Set the logger
-    util.set_logger(params['res_dir'] / 'train.log')
+    util.set_logger(log_path=params['res_dir'] / 'train.log', log_name='train')
+    logger.info("Start training.")
 
     # Create the input data pipeline
     logger.info("Loading the datasets...")
@@ -158,7 +161,7 @@ if __name__ == '__main__':
     train_dataloader = data_loader.get_dataloader(params, train=True)
     test_dataloader = data_loader.get_dataloader(params, train=False)
 
-    logger.info("- done.")
+    logger.info("done")
 
     # Define the model and optimizer
     model = net.CNN(params).cuda() if params['cuda'] else net.CNN(params)
@@ -172,10 +175,11 @@ if __name__ == '__main__':
     util.show_dict(params)
 
     # Train the model
-    logger.info("Starting training for {} epoch(s)".format(
-        params['num_epochs']))
+    logger.info(f"Starting training for {params['num_epochs']} epoch(s)")
 
-    train(model, train_dataloader, test_dataloader, optimizer,
-          loss_fn, metrics, params)
+    best_val_acc = train(model, train_dataloader, test_dataloader, optimizer,
+                         loss_fn, metrics, params)
 
-    logger.info("- train over")
+    logger.info("Train over")
+
+    print(f"The best validation accuracy is {(best_val_acc*100):05.2f}%.")
