@@ -1,6 +1,6 @@
 # This is my pytorch demo.
 
-This project implement a CNN to do image classificattion on MNIST.
+This project implement a CNN to do image classification on MNIST.
 
 ### Requirements
 
@@ -22,9 +22,9 @@ and
 python eval.py
 ```
 
-The directary config is defined in `config.py`. You can also run `python train.py --data_dir dataset/mnist` to set the config.
+The directory config is defined in `config.py`. You can also run `python train.py --data_dir dataset/mnist` to set the config.
 
-The hyperparameters is defined in `model/mnist/params.json`.
+The hyperparameter is defined in `model/mnist/params.json`.
 
 The result is under folder `res/`
 

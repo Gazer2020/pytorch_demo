@@ -1,5 +1,5 @@
 """
-    this file set the directaries:
+    this file set the directories:
     
         data_dir
         
